@@ -1,0 +1,2100 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cashew Camera Planner — Công cụ tính vùng quan sát camera PTZ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root {
+  --bg: #0a0e12;
+  --bg-2: #10161c;
+  --bg-3: #1a2229;
+  --grid: rgba(120, 180, 200, 0.06);
+  --grid-major: rgba(120, 180, 200, 0.12);
+  --text: #e8ecef;
+  --text-dim: #8a99a4;
+  --text-faint: #4a5761;
+  --accent: #f5a623;          /* amber — primary data */
+  --accent-2: #4ecdc4;         /* teal — secondary */
+  --good: #7ed957;
+  --warn: #f5a623;
+  --bad: #ef476f;
+  --tree: #5a8a3a;
+  --border: rgba(120, 180, 200, 0.15);
+  --border-strong: rgba(120, 180, 200, 0.3);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+/* Grid background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 40px 40px,
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 40px 40px,
+    radial-gradient(ellipse at 50% 0%, rgba(78, 205, 196, 0.04) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Header */
+.header {
+  position: relative;
+  z-index: 10;
+  padding: 24px 32px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(10,14,18,0.95) 0%, rgba(10,14,18,0.8) 100%);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.brand {
+  font-family: 'Fraunces', serif;
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.brand span {
+  color: var(--accent);
+  font-style: italic;
+}
+
+.meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Main layout */
+.layout {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  min-height: calc(100vh - 76px);
+}
+
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+/* Sidebar */
+.sidebar {
+  background: var(--bg-2);
+  border-right: 1px solid var(--border);
+  padding: 24px;
+  overflow-y: auto;
+  max-height: calc(100vh - 76px);
+  position: sticky;
+  top: 0;
+}
+
+@media (max-width: 1100px) {
+  .sidebar {
+    position: static;
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+.section {
+  margin-bottom: 28px;
+}
+
+.section-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding-bottom: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px dashed var(--border-strong);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-title::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+
+/* Form elements */
+.field {
+  margin-bottom: 14px;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.field label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.field label .unit {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.field input[type="number"],
+.field select {
+  width: 100%;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 3px;
+  transition: all 0.15s ease;
+}
+
+.field input[type="number"]:focus,
+.field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg);
+  box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.1);
+}
+
+.field input[type="range"] {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--bg-3);
+  height: 4px;
+  border-radius: 2px;
+  outline: none;
+}
+.field input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid var(--bg-2);
+}
+.field input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid var(--bg-2);
+}
+
+.slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.slider-wrap input[type="range"] { flex: 1; }
+.slider-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--accent);
+  min-width: 48px;
+  text-align: right;
+  font-weight: 600;
+}
+
+.preset-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.preset-btn {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 6px 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.15s;
+}
+.preset-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.preset-btn.active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* Main content */
+.main {
+  padding: 24px 32px 48px;
+  overflow-x: hidden;
+}
+
+/* KPI Cards */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.kpi {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 14px 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 2px;
+  background: var(--accent);
+}
+
+.kpi.good::before { background: var(--good); }
+.kpi.warn::before { background: var(--warn); }
+.kpi.bad::before { background: var(--bad); }
+
+.kpi-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 6px;
+}
+
+.kpi-value {
+  font-family: 'Fraunces', serif;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.kpi-unit {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-left: 4px;
+  font-weight: 400;
+}
+
+.kpi-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* Visualization Panels */
+.panel {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: linear-gradient(180deg, rgba(26, 34, 41, 0.8), rgba(16, 22, 28, 0.4));
+}
+
+.panel-title {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panel-title .marker {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--accent);
+  background: rgba(245, 166, 35, 0.1);
+  padding: 2px 8px;
+  border-radius: 2px;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+}
+
+.panel-hint {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.panel-body {
+  padding: 0;
+  position: relative;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  background: var(--bg);
+}
+
+#view3d {
+  height: 520px;
+  background: radial-gradient(ellipse at center, #0d1318 0%, #050709 100%);
+}
+
+.view3d-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 3;
+}
+.view3d-btn {
+  background: rgba(26, 34, 41, 0.9);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 6px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 2px;
+  backdrop-filter: blur(4px);
+}
+.view3d-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.view3d-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(245, 166, 35, 0.1);
+}
+
+.legend {
+  display: flex;
+  gap: 18px;
+  padding: 10px 18px;
+  background: var(--bg-3);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+/* Table */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+}
+.data-table th {
+  text-align: left;
+  padding: 10px 12px;
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  background: var(--bg-3);
+  border-bottom: 1px solid var(--border-strong);
+}
+.data-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.data-table tbody tr:hover {
+  background: rgba(245, 166, 35, 0.03);
+}
+.data-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.data-table .chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 600;
+}
+.data-table .chip.good { background: rgba(126, 217, 87, 0.15); color: var(--good); }
+.data-table .chip.warn { background: rgba(245, 166, 35, 0.15); color: var(--warn); }
+.data-table .chip.bad  { background: rgba(239, 71, 111, 0.15); color: var(--bad); }
+
+/* Recommendation box */
+.recommendation {
+  background: linear-gradient(135deg, rgba(245, 166, 35, 0.08), rgba(78, 205, 196, 0.04));
+  border: 1px solid rgba(245, 166, 35, 0.3);
+  border-left: 3px solid var(--accent);
+  padding: 18px 22px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+.recommendation h3 {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--accent);
+  margin-bottom: 8px;
+  letter-spacing: -0.01em;
+}
+.recommendation p {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+}
+.recommendation .rec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.rec-item {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.rec-item b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Action buttons */
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.action-btn {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.action-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.action-btn.primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.action-btn.primary:hover {
+  background: #ffb84d;
+}
+
+/* Camera placement list */
+.cam-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  padding: 14px 18px;
+}
+.cam-item {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 10px 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  position: relative;
+}
+.cam-item-id {
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+.cam-item-row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-dim);
+}
+.cam-item-row span:last-child { color: var(--text); }
+
+/* Formula display */
+.formula {
+  background: var(--bg-3);
+  border-left: 2px solid var(--accent-2);
+  padding: 12px 16px;
+  margin: 10px 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text);
+  border-radius: 0 3px 3px 0;
+}
+.formula b { color: var(--accent-2); }
+.formula .comment { color: var(--text-dim); font-style: italic; }
+
+/* Tooltip/info */
+.info-note {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-style: italic;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+/* Footer */
+.footer {
+  padding: 24px 32px;
+  border-top: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: center;
+  line-height: 1.7;
+}
+.footer b { color: var(--text-dim); }
+
+/* Help/tooltip */
+.help-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 10px;
+  cursor: help;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+}
+.help-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* Scrollbar */
+.sidebar::-webkit-scrollbar { width: 6px; }
+.sidebar::-webkit-scrollbar-track { background: var(--bg-2); }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+.sidebar::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="brand">Cashew <span>Camera Planner</span></div>
+    <div class="meta" style="margin-top: 2px;">Công cụ khảo sát · tính vùng quan sát · bố trí camera PTZ</div>
+  </div>
+  <div class="meta">TVAN-CASHEW-2026 · v1.0-ADD02 · Engineering Calculator</div>
+</div>
+
+<div class="layout">
+
+  <!-- ============================================================== -->
+  <!-- SIDEBAR — INPUTS                                                -->
+  <!-- ============================================================== -->
+  <aside class="sidebar">
+
+    <div class="section">
+      <div class="section-title">Vườn · Orchard parameters</div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Dài vườn <span class="unit">m</span></label>
+          <input type="number" id="fieldLength" value="200" min="20" max="1000" step="10">
+        </div>
+        <div class="field">
+          <label>Rộng vườn <span class="unit">m</span></label>
+          <input type="number" id="fieldWidth" value="100" min="20" max="500" step="10">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Hàng cách <span class="unit">m</span></label>
+          <input type="number" id="rowSpacing" value="10" min="3" max="20" step="0.5">
+        </div>
+        <div class="field">
+          <label>Cây cách <span class="unit">m</span></label>
+          <input type="number" id="colSpacing" value="5" min="3" max="20" step="0.5">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Cao cây <span class="unit">m</span></label>
+          <input type="number" id="treeHeight" value="7" min="2" max="15" step="0.5">
+        </div>
+        <div class="field">
+          <label>Đường kính tán <span class="unit">m</span></label>
+          <input type="number" id="canopyDiameter" value="5" min="1" max="12" step="0.5">
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Cột · Pole parameters</div>
+
+      <div class="field">
+        <label>Độ cao cột <span class="unit" id="poleHeightUnit">9 m</span></label>
+        <div class="slider-wrap">
+          <input type="range" id="poleHeight" min="5" max="20" step="0.5" value="9">
+          <div class="slider-value"><span id="poleHeightVal">9</span>m</div>
+        </div>
+        <div class="info-note">Nên cao hơn cây 1-3 m để nhìn xuống tán</div>
+      </div>
+
+      <div class="field">
+        <label>Số camera (gợi ý bố trí tự động) <span class="unit" id="numCamsUnit"></span></label>
+        <div class="slider-wrap">
+          <input type="range" id="numCams" min="1" max="16" step="1" value="6">
+          <div class="slider-value"><span id="numCamsVal">6</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Camera · Camera specs</div>
+
+      <div class="field">
+        <label>Preset camera</label>
+        <select id="cameraPreset">
+          <option value="hik4mp25x">Hikvision DS-2DE4425IW-DE · 4MP zoom 25×</option>
+          <option value="hik8mp32x">Hikvision DS-2DE5A432IW-DE · 8MP zoom 32×</option>
+          <option value="dahua4mp25x">Dahua SD49425XB-HNR · 4MP zoom 25×</option>
+          <option value="axis8mp30x">Axis Q6135-LE · 2MP zoom 30×</option>
+          <option value="custom">Tùy chỉnh</option>
+        </select>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Pixel ngang <span class="unit">px</span></label>
+          <input type="number" id="sensorW" value="2560" min="640" max="8000" step="64">
+        </div>
+        <div class="field">
+          <label>Pixel dọc <span class="unit">px</span></label>
+          <input type="number" id="sensorH" value="1440" min="480" max="6000" step="64">
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>FOV ngang @1× <span class="unit">°</span></label>
+          <input type="number" id="fovWide" value="60" min="30" max="120" step="1">
+        </div>
+        <div class="field">
+          <label>FOV ngang @max <span class="unit">°</span></label>
+          <input type="number" id="fovTele" value="2.4" min="0.5" max="15" step="0.1">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Mức zoom quan sát <span class="unit" id="zoomUnit">×</span></label>
+        <div class="slider-wrap">
+          <input type="range" id="zoomLevel" min="1" max="40" step="0.5" value="25">
+          <div class="slider-value"><span id="zoomVal">25</span>×</div>
+        </div>
+        <div class="preset-row">
+          <button class="preset-btn" data-zoom="1">1×</button>
+          <button class="preset-btn" data-zoom="5">5×</button>
+          <button class="preset-btn" data-zoom="10">10×</button>
+          <button class="preset-btn active" data-zoom="25">25×</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Mục tiêu · Detection target</div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Chấm bệnh min <span class="unit">mm</span></label>
+          <input type="number" id="targetSize" value="2" min="0.5" max="50" step="0.5">
+        </div>
+        <div class="field">
+          <label>Pixel tối thiểu <span class="unit">px</span></label>
+          <input type="number" id="minPixels" value="4" min="2" max="20" step="1">
+        </div>
+      </div>
+      <div class="info-note">
+        Ngưỡng GSD_max = target_size / min_pixels<br>
+        Chấm bọ xít 2mm cần ≥4px → GSD ≤ 0.5mm/px
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ============================================================== -->
+  <!-- MAIN CONTENT                                                    -->
+  <!-- ============================================================== -->
+  <main class="main">
+
+    <!-- Action buttons -->
+    <div class="actions">
+      <button class="action-btn primary" id="btnAutoPlace">⚡ Bố trí tự động</button>
+      <button class="action-btn" id="btnExportPNG">📷 Xuất PNG</button>
+      <button class="action-btn" id="btnExportJSON">💾 Xuất thông số (JSON)</button>
+      <button class="action-btn" id="btnPrintReport">🖨 In báo cáo</button>
+    </div>
+
+    <!-- KPI Grid -->
+    <div class="kpi-grid" id="kpiGrid"></div>
+
+    <!-- Recommendation -->
+    <div class="recommendation" id="recommendation"></div>
+
+    <!-- Visualization 1: Top-down view -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="marker">01 / TOP</span> Góc nhìn từ trên xuống</div>
+        <div class="panel-hint">Drag để di chuyển camera · scroll để zoom · click để thêm</div>
+      </div>
+      <div class="panel-body">
+        <canvas id="topCanvas" width="1200" height="600"></canvas>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-swatch" style="background:#5a8a3a"></div>Cây điều</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#f5a623"></div>Vị trí camera</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:rgba(78,205,196,0.25); border:1px dashed #4ecdc4"></div>Vùng phủ ở zoom hiện tại</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:rgba(245,166,35,0.15); border:1px dashed #f5a623"></div>Vùng phủ tối đa (bán kính hiệu dụng)</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:rgba(239,71,111,0.2)"></div>Vùng bị che khuất</div>
+      </div>
+    </div>
+
+    <!-- Visualization 2: Side view -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="marker">02 / SIDE</span> Mặt cắt ngang · tia nhìn camera</div>
+        <div class="panel-hint">Thay đổi "độ cao cột" để xem ảnh hưởng đến góc tà</div>
+      </div>
+      <div class="panel-body">
+        <canvas id="sideCanvas" width="1200" height="400"></canvas>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-swatch" style="background:#f5a623"></div>Tia nhìn mid-ray</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:rgba(78,205,196,0.3); border:1px solid #4ecdc4"></div>Cone nhìn camera</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:rgba(126,217,87,0.6)"></div>Tán cây nhìn thấy</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:rgba(239,71,111,0.4)"></div>Tán bị che</div>
+      </div>
+    </div>
+
+    <!-- Visualization 3: 3D view -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="marker">03 / 3D</span> Khung nhìn 3D — toàn vườn</div>
+        <div class="panel-hint">Kéo chuột để xoay · scroll để zoom · phím 1/2/3 chuyển góc</div>
+      </div>
+      <div class="panel-body" style="position:relative;">
+        <div id="view3d"></div>
+        <div class="view3d-controls">
+          <button class="view3d-btn" data-view="iso">Isometric</button>
+          <button class="view3d-btn" data-view="pilot">View từ camera 1</button>
+          <button class="view3d-btn" data-view="top">Top</button>
+          <button class="view3d-btn active" data-view="free">Tự do</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Visualization 4: Heatmap -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="marker">04 / HEATMAP</span> Heatmap mật độ camera</div>
+        <div class="panel-hint">Số camera quan sát được mỗi m² của vườn</div>
+      </div>
+      <div class="panel-body">
+        <canvas id="heatCanvas" width="1200" height="600"></canvas>
+      </div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-swatch" style="background:#1a2229"></div>0 (không có camera)</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#5a4a00"></div>1 camera</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#a07500"></div>2</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#d19800"></div>3</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#f5a623"></div>≥4 (overlap cao)</div>
+      </div>
+    </div>
+
+    <!-- Visualization 5: GSD Table -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="marker">05 / TABLE</span> Bảng GSD và vùng phủ theo khoảng cách</div>
+        <div class="panel-hint">Xanh = rõ · Vàng = biên · Đỏ = không đủ</div>
+      </div>
+      <div class="panel-body">
+        <table class="data-table" id="gsdTable"></table>
+      </div>
+    </div>
+
+    <!-- Camera list -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="marker">06 / LIST</span> Danh sách vị trí camera</div>
+        <div class="panel-hint">Tọa độ để đánh dấu khi khảo sát</div>
+      </div>
+      <div class="panel-body">
+        <div class="cam-list" id="camList"></div>
+      </div>
+    </div>
+
+    <!-- Formulas -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="marker">∑ / FORMULAS</span> Các công thức đang áp dụng</div>
+      </div>
+      <div class="panel-body" style="padding: 18px;">
+        <div class="formula">
+          <b>Góc FOV ở mức zoom z:</b> &nbsp; α(z) = 2·atan( tan(α₁/2) / z )<br>
+          <span class="comment">α₁ = FOV ở zoom 1×, α(z) thu hẹp khi z tăng</span>
+        </div>
+        <div class="formula">
+          <b>Khoảng cách ngang camera↔cây:</b> &nbsp; r = √(d² − h²)<br>
+          <span class="comment">d = khoảng cách thẳng từ camera, h = chênh cao giữa camera và tán cây quan sát</span>
+        </div>
+        <div class="formula">
+          <b>Vùng phủ ngang W:</b> &nbsp; W = 2·d·tan(α/2)<br>
+          <span class="comment">d = khoảng cách 3D từ camera đến mục tiêu</span>
+        </div>
+        <div class="formula">
+          <b>GSD (Ground Sample Distance):</b> &nbsp; GSD = W · 1000 / P_horizontal &nbsp; (mm/pixel)<br>
+          <span class="comment">P = số pixel ngang của cảm biến</span>
+        </div>
+        <div class="formula">
+          <b>Bán kính quan sát chi tiết:</b> &nbsp; r_detail = (GSD_max · P) / (2000·tan(α/2))<br>
+          <span class="comment">r_detail = khoảng cách xa nhất mà vẫn đạt GSD_max (m)</span>
+        </div>
+        <div class="formula">
+          <b>Diện tích quan sát 1 camera:</b> &nbsp; A_cam = π · r_detail² · β - A_blocked<br>
+          <span class="comment">β = 0.85 (hệ số hiệu dụng do overlap); A_blocked = diện tích bị cây che tính theo thuật toán ray-casting</span>
+        </div>
+        <div class="formula">
+          <b>Số camera tối thiểu:</b> &nbsp; N ≥ A_field / (A_cam · η)<br>
+          <span class="comment">η = 0.75 (ép buộc overlap để đảm bảo không có blind spot); A_field = diện tích vườn</span>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div class="footer">
+  <b>Cashew Camera Planner</b> · Công cụ mô phỏng do đơn vị tư vấn xây dựng · Tài liệu đi kèm TVAN-CASHEW-2026-v1.0-ADD01<br>
+  Mọi số liệu là ước lượng — cần xác nhận bằng khảo sát thực địa với thước laser và ống nhòm · © 2026
+</div>
+
+<script>
+// ============================================================
+// STATE & DOM
+// ============================================================
+const $ = id => document.getElementById(id);
+
+const state = {
+  // Inputs
+  field: { length: 200, width: 100 },
+  spacing: { row: 10, col: 5 },
+  tree: { height: 7, canopy: 5 },
+  pole: { height: 9 },
+  cam: {
+    sensorW: 2560, sensorH: 1440,
+    fovWide: 60, fovTele: 2.4,
+    zoom: 25
+  },
+  target: { size: 2, minPx: 4 },
+  numCams: 6,
+  cameras: [],  // {x, y, label}
+  selectedCam: 0,
+
+  // Derived
+  gsdMax: 0.5,
+  currentFov: 2.4,
+  rDetail: 30
+};
+
+const PRESETS = {
+  hik4mp25x:    { sensorW: 2560, sensorH: 1440, fovWide: 60.0, fovTele: 2.4 },
+  hik8mp32x:    { sensorW: 3840, sensorH: 2160, fovWide: 58.0, fovTele: 2.0 },
+  dahua4mp25x:  { sensorW: 2560, sensorH: 1440, fovWide: 62.5, fovTele: 2.3 },
+  axis8mp30x:   { sensorW: 1920, sensorH: 1080, fovWide: 63.5, fovTele: 2.1 }
+};
+
+// ============================================================
+// CORE MATH FUNCTIONS
+// ============================================================
+
+// FOV at zoom z, given FOV at zoom 1
+function fovAtZoom(fov1, z) {
+  const half = Math.atan(Math.tan(deg2rad(fov1) / 2) / z);
+  return rad2deg(2 * half);
+}
+
+function deg2rad(d) { return d * Math.PI / 180; }
+function rad2deg(r) { return r * 180 / Math.PI; }
+
+// Coverage width at distance d (m)
+function coverageWidth(d, fov) {
+  return 2 * d * Math.tan(deg2rad(fov) / 2);
+}
+
+// GSD at distance d
+function gsdAt(d, fov, sensorPx) {
+  return coverageWidth(d, fov) * 1000 / sensorPx;
+}
+
+// Max distance that still meets GSD threshold
+function maxDistance(gsdMax, fov, sensorPx) {
+  return (gsdMax * sensorPx) / (2000 * Math.tan(deg2rad(fov) / 2));
+}
+
+// 3D slant distance from camera to point on tree canopy at height h_tree
+function slantDistance(hPole, hTree, horizDist) {
+  const dh = hPole - hTree;
+  return Math.sqrt(horizDist * horizDist + dh * dh);
+}
+
+// Auto-place cameras in grid pattern
+function autoPlaceCameras(n, fieldL, fieldW) {
+  if (n <= 0) return [];
+
+  // Find best grid arrangement (rows × cols) close to aspect ratio
+  const aspect = fieldL / fieldW;
+  let bestRows = 1, bestCols = n;
+  let bestRatio = Infinity;
+
+  for (let rows = 1; rows <= n; rows++) {
+    const cols = Math.ceil(n / rows);
+    if (rows * cols < n) continue;
+    const cellAspect = (fieldL / cols) / (fieldW / rows);
+    const diff = Math.abs(cellAspect - aspect) + Math.abs(rows * cols - n) * 0.3;
+    if (diff < bestRatio) {
+      bestRatio = diff;
+      bestRows = rows;
+      bestCols = cols;
+    }
+  }
+
+  const cams = [];
+  const dx = fieldL / (bestCols);
+  const dy = fieldW / (bestRows);
+  for (let r = 0; r < bestRows; r++) {
+    for (let c = 0; c < bestCols; c++) {
+      if (cams.length >= n) break;
+      cams.push({
+        x: dx / 2 + c * dx,
+        y: dy / 2 + r * dy,
+        id: cams.length + 1
+      });
+    }
+  }
+  return cams;
+}
+
+// Check if a tree row is blocked between camera and target
+// Simple cylinder model: each tree has canopy radius, blocks if ray passes within radius
+function isBlocked(camX, camY, camZ, tgtX, tgtY, tgtZ, trees, canopyRadius, treeHeight) {
+  // For each tree between cam and target, check if line passes through canopy cylinder
+  const dx = tgtX - camX, dy = tgtY - camY, dz = tgtZ - camZ;
+  const totalDist = Math.sqrt(dx*dx + dy*dy);
+  if (totalDist < 0.01) return false;
+
+  for (const t of trees) {
+    // Skip the target tree itself
+    if (Math.abs(t.x - tgtX) < 0.1 && Math.abs(t.y - tgtY) < 0.1) continue;
+
+    // Distance from tree center to camera (horizontal)
+    const camDist = Math.sqrt((t.x - camX)**2 + (t.y - camY)**2);
+    const tgtDist = Math.sqrt((t.x - tgtX)**2 + (t.y - tgtY)**2);
+
+    // Tree must be between cam and target in terms of distance
+    if (camDist >= totalDist - 0.5) continue;
+
+    // Parametric t where tree is closest to line: proj onto (cam->tgt) direction
+    const tx = (t.x - camX) * dx / totalDist + (t.y - camY) * dy / totalDist;
+    if (tx < 0 || tx > totalDist) continue;
+
+    // Perpendicular distance from tree center to ray (horizontal)
+    const fx = camX + (dx / totalDist) * tx;
+    const fy = camY + (dy / totalDist) * tx;
+    const perpDist = Math.sqrt((t.x - fx)**2 + (t.y - fy)**2);
+
+    if (perpDist < canopyRadius) {
+      // Check if the ray at that horizontal distance is below tree top
+      const rayZ = camZ + dz * (tx / totalDist);
+      // Tree top is at treeHeight; if ray is below tree top at this point, it's blocked
+      if (rayZ < treeHeight) return true;
+    }
+  }
+  return false;
+}
+
+// Get all tree positions
+function getTrees() {
+  const trees = [];
+  const L = state.field.length;
+  const W = state.field.width;
+  const rx = state.spacing.col;  // along length
+  const ry = state.spacing.row;  // along width
+  const offsetX = rx / 2;
+  const offsetY = ry / 2;
+  for (let x = offsetX; x < L; x += rx) {
+    for (let y = offsetY; y < W; y += ry) {
+      trees.push({ x, y });
+    }
+  }
+  return trees;
+}
+
+// ============================================================
+// UPDATE & RENDER
+// ============================================================
+
+function readInputs() {
+  state.field.length = +$('fieldLength').value;
+  state.field.width  = +$('fieldWidth').value;
+  state.spacing.row  = +$('rowSpacing').value;
+  state.spacing.col  = +$('colSpacing').value;
+  state.tree.height  = +$('treeHeight').value;
+  state.tree.canopy  = +$('canopyDiameter').value;
+  state.pole.height  = +$('poleHeight').value;
+  state.numCams      = +$('numCams').value;
+  state.cam.sensorW  = +$('sensorW').value;
+  state.cam.sensorH  = +$('sensorH').value;
+  state.cam.fovWide  = +$('fovWide').value;
+  state.cam.fovTele  = +$('fovTele').value;
+  state.cam.zoom     = +$('zoomLevel').value;
+  state.target.size  = +$('targetSize').value;
+  state.target.minPx = +$('minPixels').value;
+
+  // Calculate derived
+  state.gsdMax = state.target.size / state.target.minPx;
+  state.currentFov = fovAtZoom(state.cam.fovWide, state.cam.zoom);
+  state.rDetail = maxDistance(state.gsdMax, state.currentFov, state.cam.sensorW);
+}
+
+function updateKPIs() {
+  const fieldArea = state.field.length * state.field.width;
+  const trees = getTrees();
+  const nTrees = trees.length;
+
+  const beta = 0.85; // efficiency
+  const aCam = Math.PI * state.rDetail * state.rDetail * beta;
+  // Thực tế: cần overlap ~25% để không có blind spot → hiệu dụng 0.65
+  const nCamMin = Math.max(1, Math.ceil(fieldArea / (aCam * 0.65)));
+
+  const gsd15m = gsdAt(15, state.currentFov, state.cam.sensorW);
+  const w15m = coverageWidth(15, state.currentFov);
+
+  // Coverage with current placement
+  const coverage = calculateCoverage();
+
+  const kpis = [
+    { label: 'DIỆN TÍCH VƯỜN', value: (fieldArea / 10000).toFixed(2), unit: 'ha', sub: `${fieldArea.toLocaleString('vi-VN')} m²`, cls: '' },
+    { label: 'TỔNG SỐ CÂY', value: nTrees.toLocaleString('vi-VN'), unit: '', sub: `${state.spacing.row}×${state.spacing.col}m`, cls: '' },
+    { label: 'FOV HIỆN TẠI', value: state.currentFov.toFixed(2), unit: '°', sub: `zoom ${state.cam.zoom}×`, cls: '' },
+    { label: 'GSD @ 15M', value: gsd15m.toFixed(3), unit: 'mm/px', sub: `W = ${w15m.toFixed(2)}m`, cls: gsd15m <= state.gsdMax ? 'good' : 'warn' },
+    { label: 'BÁN KÍNH CHI TIẾT', value: state.rDetail.toFixed(1), unit: 'm', sub: `đạt GSD ${state.gsdMax.toFixed(2)}`, cls: 'good' },
+    { label: 'CAMERA KHUYẾN NGHỊ', value: nCamMin, unit: '', sub: `đang đặt ${state.numCams}`, cls: state.numCams >= nCamMin ? 'good' : 'warn' },
+    { label: 'BAO PHỦ CHI TIẾT', value: coverage.detailPct.toFixed(1), unit: '%', sub: `${coverage.detailArea.toFixed(0)} m²`, cls: coverage.detailPct > 80 ? 'good' : (coverage.detailPct > 60 ? 'warn' : 'bad') },
+    { label: 'VÙNG MÙ', value: coverage.blindPct.toFixed(1), unit: '%', sub: `${coverage.blindArea.toFixed(0)} m²`, cls: coverage.blindPct < 10 ? 'good' : (coverage.blindPct < 25 ? 'warn' : 'bad') }
+  ];
+
+  $('kpiGrid').innerHTML = kpis.map(k => `
+    <div class="kpi ${k.cls}">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.value}<span class="kpi-unit">${k.unit}</span></div>
+      <div class="kpi-sub">${k.sub}</div>
+    </div>
+  `).join('');
+
+  // Save for use elsewhere
+  state._coverage = coverage;
+  state._nCamMin = nCamMin;
+}
+
+// Calculate coverage using grid sampling
+function calculateCoverage() {
+  const L = state.field.length, W = state.field.width;
+  const gridSize = 2; // sample every 2m
+  const trees = getTrees();
+  const canopyR = state.tree.canopy / 2;
+  const camZ = state.pole.height;
+  const tgtZ = state.tree.height; // tree top
+
+  let totalCells = 0;
+  let detailCovered = 0;  // within rDetail of some camera AND not blocked
+  let anyCovered = 0;     // within rMax (2× rDetail) of some camera
+  let cellsCov = [];      // for heatmap
+
+  for (let x = gridSize/2; x < L; x += gridSize) {
+    for (let y = gridSize/2; y < W; y += gridSize) {
+      totalCells++;
+      let count = 0;
+      let hasDetail = false;
+      for (const cam of state.cameras) {
+        const horiz = Math.sqrt((cam.x - x)**2 + (cam.y - y)**2);
+        if (horiz > state.rDetail * 1.5) continue; // too far
+        // Check blocking: simplified — check if any tree between cam and (x, y, tree_height)
+        const blocked = isBlocked(cam.x, cam.y, camZ, x, y, tgtZ, trees, canopyR, state.tree.height);
+        if (!blocked && horiz <= state.rDetail) { hasDetail = true; count++; }
+      }
+      if (hasDetail) detailCovered++;
+      if (count > 0) anyCovered++;
+      cellsCov.push({ x, y, count, hasDetail });
+    }
+  }
+
+  const cellArea = gridSize * gridSize;
+  return {
+    detailArea: detailCovered * cellArea,
+    detailPct: (detailCovered / totalCells) * 100,
+    anyArea: anyCovered * cellArea,
+    anyPct: (anyCovered / totalCells) * 100,
+    blindArea: (totalCells - anyCovered) * cellArea,
+    blindPct: ((totalCells - anyCovered) / totalCells) * 100,
+    cells: cellsCov,
+    gridSize
+  };
+}
+
+function updateRecommendation() {
+  const cov = state._coverage;
+  const nRec = state._nCamMin;
+  let statusText, statusColor, recs = [];
+
+  if (cov.detailPct >= 85) {
+    statusText = 'Bố trí tốt';
+    recs.push({ k: 'Mức độ bao phủ', v: `${cov.detailPct.toFixed(0)}% đạt GSD chi tiết — ĐẠT` });
+  } else if (cov.detailPct >= 60) {
+    statusText = 'Chấp nhận được — có thể cải thiện';
+    recs.push({ k: 'Bao phủ hiện tại', v: `${cov.detailPct.toFixed(0)}% — nên ≥ 85%` });
+  } else {
+    statusText = 'Cần điều chỉnh';
+    recs.push({ k: 'Bao phủ thấp', v: `${cov.detailPct.toFixed(0)}% — cần tăng camera hoặc zoom` });
+  }
+
+  recs.push({ k: 'Bán kính chi tiết', v: `${state.rDetail.toFixed(1)} m (zoom ${state.cam.zoom}×)` });
+  recs.push({ k: 'Camera tối thiểu', v: `${nRec} cái` });
+  recs.push({ k: 'Hiện đang đặt', v: `${state.numCams} cái` });
+
+  // Suggestion logic
+  let suggestion = '';
+  if (state.numCams < nRec) {
+    suggestion = `Tăng số camera lên <b>${nRec}</b> để đạt độ phủ khuyến nghị. `;
+  }
+  if (state.rDetail < 15) {
+    suggestion += `Zoom hiện tại tạo bán kính chi tiết chỉ <b>${state.rDetail.toFixed(0)}m</b> — cân nhắc giảm zoom hoặc tăng số camera. `;
+  } else if (state.rDetail > 40) {
+    suggestion += `Có thể giảm zoom để tăng FOV mà vẫn đạt chi tiết. `;
+  }
+  if (cov.blindPct > 15) {
+    suggestion += `Vùng mù <b>${cov.blindPct.toFixed(0)}%</b> cao — bố trí lại camera để overlap tốt hơn. `;
+  }
+  if (state.pole.height < state.tree.height + 1) {
+    suggestion += `Cột (${state.pole.height}m) không cao hơn cây (${state.tree.height}m) — camera bị tán cây che. Nâng lên ${Math.ceil(state.tree.height + 2)}m. `;
+  }
+  if (!suggestion) suggestion = 'Cấu hình hiện tại tối ưu cho các tham số đã cho. Nên xác nhận bằng khảo sát thực địa.';
+
+  $('recommendation').innerHTML = `
+    <h3>📋 ${statusText}</h3>
+    <p>${suggestion}</p>
+    <div class="rec-grid">
+      ${recs.map(r => `<div class="rec-item"><b>${r.k}:</b> ${r.v}</div>`).join('')}
+    </div>
+  `;
+}
+
+function updateGsdTable() {
+  const distances = [5, 10, 15, 20, 25, 30, 40, 50];
+  const rows = distances.map(d => {
+    const fov = state.currentFov;
+    const w = coverageWidth(d, fov);
+    const h = w * state.cam.sensorH / state.cam.sensorW;
+    const gsd = gsdAt(d, fov, state.cam.sensorW);
+    const pxForTarget = state.target.size / gsd;
+    let status = 'good', label = 'RÕ';
+    if (pxForTarget < state.target.minPx * 0.75) { status = 'bad'; label = 'KHÔNG ĐỦ'; }
+    else if (pxForTarget < state.target.minPx * 1.25) { status = 'warn'; label = 'BIÊN'; }
+    return { d, w, h, gsd, pxForTarget, status, label };
+  });
+
+  $('gsdTable').innerHTML = `
+    <thead>
+      <tr>
+        <th>Khoảng cách d</th>
+        <th class="num">Vùng phủ W × H</th>
+        <th class="num">GSD (mm/px)</th>
+        <th class="num">Pixel cho chấm ${state.target.size}mm</th>
+        <th>Trạng thái</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map(r => `
+        <tr>
+          <td>${r.d} m</td>
+          <td class="num">${r.w.toFixed(2)} × ${r.h.toFixed(2)} m</td>
+          <td class="num">${r.gsd.toFixed(3)}</td>
+          <td class="num">${r.pxForTarget.toFixed(1)} px</td>
+          <td><span class="chip ${r.status}">${r.label}</span></td>
+        </tr>
+      `).join('')}
+    </tbody>
+  `;
+}
+
+function updateCameraList() {
+  $('camList').innerHTML = state.cameras.map(cam => `
+    <div class="cam-item">
+      <div class="cam-item-id">CAM ${String(cam.id).padStart(2, '0')}</div>
+      <div class="cam-item-row"><span>X:</span><span>${cam.x.toFixed(1)} m</span></div>
+      <div class="cam-item-row"><span>Y:</span><span>${cam.y.toFixed(1)} m</span></div>
+      <div class="cam-item-row"><span>Cao:</span><span>${state.pole.height} m</span></div>
+      <div class="cam-item-row"><span>R:</span><span>${state.rDetail.toFixed(1)} m</span></div>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+// CANVAS: TOP-DOWN VIEW
+// ============================================================
+function drawTopDown() {
+  const canvas = $('topCanvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 600 * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = 600;
+
+  // Clear
+  ctx.fillStyle = '#0a0e12';
+  ctx.fillRect(0, 0, W, H);
+
+  const L = state.field.length, WD = state.field.width;
+  // Compute scale to fit with padding
+  const pad = 50;
+  const scale = Math.min((W - pad*2) / L, (H - pad*2) / WD);
+  const ox = (W - L * scale) / 2;
+  const oy = (H - WD * scale) / 2;
+
+  // World-to-canvas
+  const wx = x => ox + x * scale;
+  const wy = y => oy + y * scale;
+
+  // Draw field
+  ctx.fillStyle = '#10161c';
+  ctx.fillRect(wx(0), wy(0), L * scale, WD * scale);
+
+  // Draw grid (every 10m)
+  ctx.strokeStyle = 'rgba(120, 180, 200, 0.05)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= L; x += 10) {
+    ctx.beginPath();
+    ctx.moveTo(wx(x), wy(0));
+    ctx.lineTo(wx(x), wy(WD));
+    ctx.stroke();
+  }
+  for (let y = 0; y <= WD; y += 10) {
+    ctx.beginPath();
+    ctx.moveTo(wx(0), wy(y));
+    ctx.lineTo(wx(L), wy(y));
+    ctx.stroke();
+  }
+
+  // Draw field border
+  ctx.strokeStyle = 'rgba(120, 180, 200, 0.3)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(wx(0), wy(0), L * scale, WD * scale);
+
+  // Draw trees
+  const trees = getTrees();
+  const canopyR = state.tree.canopy / 2;
+  ctx.fillStyle = 'rgba(90, 138, 58, 0.4)';
+  ctx.strokeStyle = 'rgba(90, 138, 58, 0.8)';
+  ctx.lineWidth = 0.5;
+  trees.forEach(t => {
+    ctx.beginPath();
+    ctx.arc(wx(t.x), wy(t.y), canopyR * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  });
+
+  // Draw camera coverage circles (current zoom)
+  state.cameras.forEach(cam => {
+    // Detail coverage at current zoom
+    ctx.fillStyle = 'rgba(78, 205, 196, 0.08)';
+    ctx.strokeStyle = 'rgba(78, 205, 196, 0.5)';
+    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(wx(cam.x), wy(cam.y), state.rDetail * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // Draw blind spots (red) - areas with no camera within rDetail
+  if (state._coverage) {
+    const cov = state._coverage;
+    cov.cells.forEach(cell => {
+      if (cell.count === 0) {
+        ctx.fillStyle = 'rgba(239, 71, 111, 0.18)';
+        ctx.fillRect(wx(cell.x - cov.gridSize/2), wy(cell.y - cov.gridSize/2),
+                      cov.gridSize * scale, cov.gridSize * scale);
+      }
+    });
+  }
+
+  // Draw cameras on top
+  state.cameras.forEach((cam, i) => {
+    const cx = wx(cam.x), cy = wy(cam.y);
+    // Outer glow
+    ctx.fillStyle = 'rgba(245, 166, 35, 0.3)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+    ctx.fill();
+    // Pole
+    ctx.fillStyle = '#f5a623';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+    ctx.fill();
+    // ID
+    ctx.fillStyle = '#0a0e12';
+    ctx.font = 'bold 10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(cam.id, cx, cy);
+
+    // Label above
+    ctx.fillStyle = '#f5a623';
+    ctx.font = '11px "JetBrains Mono", monospace';
+    ctx.fillText(`CAM${cam.id}`, cx, cy - 14);
+  });
+
+  // Axes labels
+  ctx.fillStyle = 'rgba(138, 153, 164, 0.7)';
+  ctx.font = '10px "JetBrains Mono", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(`0`, wx(0) - 10, wy(WD) + 14);
+  ctx.fillText(`${L}m`, wx(L) - 18, wy(WD) + 14);
+  ctx.fillText(`${WD}m`, wx(0) - 30, wy(0) + 4);
+  ctx.fillText(`0`, wx(0) - 10, wy(WD) + 14);
+
+  // Scale bar
+  ctx.fillStyle = 'rgba(138, 153, 164, 0.8)';
+  ctx.font = '10px "JetBrains Mono", monospace';
+  ctx.fillText(`Scale: 10m`, wx(0), wy(WD) + 32);
+  ctx.strokeStyle = 'rgba(245, 166, 35, 0.8)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(wx(0) + 60, wy(WD) + 30);
+  ctx.lineTo(wx(10) + 60, wy(WD) + 30);
+  ctx.stroke();
+
+  // Store projection for interaction
+  state._topProj = { ox, oy, scale, wx, wy, W, H };
+}
+
+// ============================================================
+// CANVAS: SIDE VIEW
+// ============================================================
+function drawSideView() {
+  const canvas = $('sideCanvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 400 * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = 400;
+
+  ctx.fillStyle = '#0a0e12';
+  ctx.fillRect(0, 0, W, H);
+
+  // Show a slice: camera at cam0, looking at trees along the line
+  if (state.cameras.length === 0) return;
+
+  const cam = state.cameras[state.selectedCam] || state.cameras[0];
+
+  // Draw trees in a row from camera out to nearest edge direction
+  // Simulate: 50m slice, ground at y=H-40, sky above
+  const maxRange = 60;
+  const pad = 40;
+  const sx = x => pad + (x / maxRange) * (W - pad * 2);
+  const sy = z => (H - 40) - z * ((H - 60) / 15);  // 15m vertical range
+
+  // Ground
+  ctx.fillStyle = '#1a2229';
+  ctx.fillRect(0, sy(0), W, H - sy(0));
+  ctx.strokeStyle = 'rgba(120, 180, 200, 0.3)';
+  ctx.beginPath();
+  ctx.moveTo(0, sy(0));
+  ctx.lineTo(W, sy(0));
+  ctx.stroke();
+
+  // Grid
+  ctx.strokeStyle = 'rgba(120, 180, 200, 0.05)';
+  ctx.lineWidth = 1;
+  for (let d = 0; d <= maxRange; d += 5) {
+    ctx.beginPath();
+    ctx.moveTo(sx(d), sy(0));
+    ctx.lineTo(sx(d), sy(15));
+    ctx.stroke();
+    if (d % 10 === 0) {
+      ctx.fillStyle = 'rgba(138, 153, 164, 0.5)';
+      ctx.font = '9px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${d}m`, sx(d), sy(0) + 15);
+    }
+  }
+  for (let z = 0; z <= 15; z += 3) {
+    ctx.beginPath();
+    ctx.moveTo(sx(0), sy(z));
+    ctx.lineTo(sx(maxRange), sy(z));
+    ctx.stroke();
+    if (z > 0) {
+      ctx.fillStyle = 'rgba(138, 153, 164, 0.5)';
+      ctx.font = '9px "JetBrains Mono", monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(`${z}m`, sx(0) - 3, sy(z) + 3);
+    }
+  }
+
+  // Draw camera pole
+  const poleH = state.pole.height;
+  ctx.fillStyle = '#546e7a';
+  ctx.fillRect(sx(0) - 3, sy(poleH), 6, sy(0) - sy(poleH));
+  // Camera box
+  ctx.fillStyle = '#f5a623';
+  ctx.fillRect(sx(0) - 8, sy(poleH) - 5, 16, 8);
+  ctx.fillStyle = '#0a0e12';
+  ctx.beginPath();
+  ctx.arc(sx(0) - 3, sy(poleH) - 1, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Draw trees along the slice
+  const treeCanopyR = state.tree.canopy / 2;
+  const treeH = state.tree.height;
+  const canopyVertical = treeH * 0.45; // height of canopy
+  const trunkH = treeH - canopyVertical;
+
+  for (let d = state.spacing.col; d < maxRange; d += state.spacing.col) {
+    // Trunk
+    ctx.fillStyle = '#5d4037';
+    ctx.fillRect(sx(d) - 3, sy(trunkH), 6, sy(0) - sy(trunkH));
+    // Canopy (ellipse)
+    ctx.fillStyle = 'rgba(90, 138, 58, 0.7)';
+    ctx.strokeStyle = 'rgba(90, 138, 58, 1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(sx(d), sy(treeH - canopyVertical / 2), treeCanopyR * (W - pad*2) / maxRange, canopyVertical * (H - 60) / 15 / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // Draw FOV cone from camera
+  const halfFov = deg2rad(state.currentFov / 2);
+  // Point camera at tree canopy mid-height at ~15m
+  const aimDist = 15;
+  const aimZ = treeH - canopyVertical / 2;
+  const dxAim = aimDist;
+  const dzAim = aimZ - poleH;
+  const aimAngle = Math.atan2(dzAim, dxAim);
+
+  // Upper ray
+  const upAng = aimAngle - halfFov;
+  const loAng = aimAngle + halfFov;
+
+  // Vertical FOV proportional to sensor aspect
+  const vFov = deg2rad(state.currentFov * state.cam.sensorH / state.cam.sensorW);
+
+  // Cone
+  ctx.strokeStyle = 'rgba(78, 205, 196, 0.7)';
+  ctx.fillStyle = 'rgba(78, 205, 196, 0.08)';
+  ctx.lineWidth = 1.2;
+  const rayLen = 50;
+  ctx.beginPath();
+  ctx.moveTo(sx(0), sy(poleH));
+  ctx.lineTo(sx(Math.cos(upAng) * rayLen), sy(poleH + Math.sin(upAng) * rayLen));
+  ctx.lineTo(sx(Math.cos(loAng) * rayLen), sy(poleH + Math.sin(loAng) * rayLen));
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Central ray
+  ctx.strokeStyle = 'rgba(245, 166, 35, 0.9)';
+  ctx.setLineDash([4, 3]);
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(sx(0), sy(poleH));
+  ctx.lineTo(sx(Math.cos(aimAngle) * rayLen), sy(poleH + Math.sin(aimAngle) * rayLen));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Mark aim point
+  ctx.fillStyle = '#f5a623';
+  ctx.beginPath();
+  ctx.arc(sx(aimDist), sy(aimZ), 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Label
+  ctx.fillStyle = '#f5a623';
+  ctx.font = 'bold 11px "JetBrains Mono", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Camera pole ${poleH}m`, sx(0) + 12, sy(poleH));
+  ctx.fillStyle = 'rgba(78, 205, 196, 0.9)';
+  ctx.fillText(`α = ${state.currentFov.toFixed(2)}°`, sx(12), sy(poleH + 1));
+
+  // Info box
+  const gsdTop = gsdAt(Math.sqrt(aimDist*aimDist + dzAim*dzAim), state.currentFov, state.cam.sensorW);
+  ctx.fillStyle = 'rgba(16, 22, 28, 0.9)';
+  ctx.strokeStyle = 'rgba(245, 166, 35, 0.5)';
+  ctx.fillRect(W - 200, 12, 188, 68);
+  ctx.strokeRect(W - 200, 12, 188, 68);
+  ctx.fillStyle = '#f5a623';
+  ctx.font = '10px "JetBrains Mono", monospace';
+  ctx.fillText('THÔNG SỐ CẮT NGANG', W - 192, 28);
+  ctx.fillStyle = '#e8ecef';
+  ctx.fillText(`Aim: ${aimDist}m, z=${aimZ.toFixed(1)}m`, W - 192, 44);
+  ctx.fillText(`Slant: ${Math.sqrt(aimDist*aimDist + dzAim*dzAim).toFixed(1)}m`, W - 192, 58);
+  ctx.fillText(`GSD: ${gsdTop.toFixed(3)}mm/px`, W - 192, 72);
+}
+
+// ============================================================
+// CANVAS: HEATMAP
+// ============================================================
+function drawHeatmap() {
+  const canvas = $('heatCanvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 600 * dpr;
+  ctx.scale(dpr, dpr);
+  const W = rect.width, H = 600;
+
+  ctx.fillStyle = '#0a0e12';
+  ctx.fillRect(0, 0, W, H);
+
+  const L = state.field.length, WD = state.field.width;
+  const pad = 50;
+  const scale = Math.min((W - pad*2) / L, (H - pad*2) / WD);
+  const ox = (W - L * scale) / 2;
+  const oy = (H - WD * scale) / 2;
+  const wx = x => ox + x * scale;
+  const wy = y => oy + y * scale;
+
+  ctx.fillStyle = '#10161c';
+  ctx.fillRect(wx(0), wy(0), L * scale, WD * scale);
+
+  if (!state._coverage) return;
+
+  // Color ramp
+  const colors = ['#1a2229', '#5a4a00', '#a07500', '#d19800', '#f5a623', '#ffcf66'];
+  const cov = state._coverage;
+  cov.cells.forEach(cell => {
+    const c = Math.min(cell.count, 5);
+    ctx.fillStyle = colors[c];
+    ctx.fillRect(wx(cell.x - cov.gridSize/2), wy(cell.y - cov.gridSize/2),
+                  cov.gridSize * scale, cov.gridSize * scale);
+  });
+
+  // Field border
+  ctx.strokeStyle = 'rgba(120, 180, 200, 0.3)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(wx(0), wy(0), L * scale, WD * scale);
+
+  // Cameras
+  state.cameras.forEach(cam => {
+    ctx.fillStyle = 'white';
+    ctx.strokeStyle = '#0a0e12';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(wx(cam.x), wy(cam.y), 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#0a0e12';
+    ctx.font = 'bold 10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(cam.id, wx(cam.x), wy(cam.y));
+  });
+
+  // Title overlay
+  ctx.fillStyle = 'rgba(245, 166, 35, 0.9)';
+  ctx.font = 'bold 11px "JetBrains Mono", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(`COVERAGE: ${state._coverage.detailPct.toFixed(1)}% · BLIND: ${state._coverage.blindPct.toFixed(1)}%`, pad, 30);
+}
+
+// ============================================================
+// 3D VIEW (Three.js)
+// ============================================================
+let threeCtx = null;
+function init3D() {
+  const container = $('view3d');
+  if (typeof THREE === 'undefined') {
+    container.innerHTML = '<div style="color:#8a99a4; font-family: JetBrains Mono, monospace; font-size:12px; padding: 40px; text-align:center;">⚠ View 3D cần Three.js từ CDN. Kết nối Internet và tải lại trang.<br><br>Các view 2D khác (top-down, side, heatmap) vẫn hoạt động bình thường.</div>';
+    return;
+  }
+  const width = container.clientWidth;
+  const height = 520;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0e12);
+  scene.fog = new THREE.Fog(0x0a0e12, 100, 400);
+
+  const camera = new THREE.PerspectiveCamera(50, width/height, 0.1, 2000);
+  camera.position.set(-80, 90, 140);
+  camera.lookAt(100, 0, 50);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(width, height);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = false;
+  container.appendChild(renderer.domElement);
+
+  // Lights
+  const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+  scene.add(ambient);
+  const dir = new THREE.DirectionalLight(0xffecb3, 0.7);
+  dir.position.set(100, 200, 50);
+  scene.add(dir);
+  const dir2 = new THREE.DirectionalLight(0x4ecdc4, 0.25);
+  dir2.position.set(-50, 100, -50);
+  scene.add(dir2);
+
+  // Simple orbit controls
+  const controls = {
+    radius: 180,
+    theta: Math.PI * 0.75,
+    phi: Math.PI * 0.35,
+    target: new THREE.Vector3(100, 0, 50),
+    isDragging: false,
+    lastX: 0, lastY: 0
+  };
+
+  function updateCamera() {
+    camera.position.x = controls.target.x + controls.radius * Math.sin(controls.phi) * Math.cos(controls.theta);
+    camera.position.y = controls.target.y + controls.radius * Math.cos(controls.phi);
+    camera.position.z = controls.target.z + controls.radius * Math.sin(controls.phi) * Math.sin(controls.theta);
+    camera.lookAt(controls.target);
+  }
+  updateCamera();
+
+  renderer.domElement.addEventListener('mousedown', e => {
+    controls.isDragging = true;
+    controls.lastX = e.clientX; controls.lastY = e.clientY;
+  });
+  window.addEventListener('mouseup', () => controls.isDragging = false);
+  window.addEventListener('mousemove', e => {
+    if (!controls.isDragging) return;
+    const dx = e.clientX - controls.lastX;
+    const dy = e.clientY - controls.lastY;
+    controls.theta += dx * 0.01;
+    controls.phi = Math.max(0.1, Math.min(Math.PI/2 - 0.05, controls.phi - dy * 0.01));
+    controls.lastX = e.clientX; controls.lastY = e.clientY;
+    updateCamera();
+  });
+  renderer.domElement.addEventListener('wheel', e => {
+    e.preventDefault();
+    controls.radius = Math.max(30, Math.min(500, controls.radius + e.deltaY * 0.3));
+    updateCamera();
+  }, { passive: false });
+
+  // View presets
+  document.querySelectorAll('.view3d-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.view3d-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const view = btn.dataset.view;
+      const L = state.field.length, W = state.field.width;
+      controls.target.set(L/2, 0, W/2);
+      if (view === 'iso') {
+        controls.theta = Math.PI * 0.75;
+        controls.phi = Math.PI * 0.35;
+        controls.radius = 180;
+      } else if (view === 'top') {
+        controls.theta = 0;
+        controls.phi = 0.1;
+        controls.radius = 180;
+      } else if (view === 'pilot') {
+        if (state.cameras.length > 0) {
+          const cam = state.cameras[0];
+          controls.target.set(L/2, state.tree.height/2, W/2);
+          controls.radius = Math.hypot(L/2 - cam.x, W/2 - cam.y, state.tree.height - state.pole.height);
+          controls.theta = Math.atan2(W/2 - cam.y, L/2 - cam.x) + Math.PI;
+          controls.phi = Math.PI/2 - 0.15;
+        }
+      }
+      updateCamera();
+    });
+  });
+
+  threeCtx = { scene, camera, renderer, controls, updateCamera, objects: [] };
+
+  (function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
+  })();
+
+  // Resize handler
+  window.addEventListener('resize', () => {
+    const w = container.clientWidth;
+    renderer.setSize(w, height);
+    camera.aspect = w / height;
+    camera.updateProjectionMatrix();
+  });
+}
+
+function rebuild3D() {
+  if (!threeCtx) return;
+  const { scene, objects } = threeCtx;
+
+  // Remove old objects
+  objects.forEach(o => scene.remove(o));
+  objects.length = 0;
+
+  const L = state.field.length, WD = state.field.width;
+
+  // Ground
+  const groundGeo = new THREE.PlaneGeometry(L * 2, WD * 2);
+  const groundMat = new THREE.MeshBasicMaterial({ color: 0x14191f, transparent: true, opacity: 0.9 });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(L/2, 0, WD/2);
+  scene.add(ground); objects.push(ground);
+
+  // Field border
+  const borderGeo = new THREE.BufferGeometry();
+  const borderPts = [
+    0, 0.05, 0,  L, 0.05, 0,
+    L, 0.05, 0,  L, 0.05, WD,
+    L, 0.05, WD, 0, 0.05, WD,
+    0, 0.05, WD, 0, 0.05, 0
+  ];
+  borderGeo.setAttribute('position', new THREE.Float32BufferAttribute(borderPts, 3));
+  const borderMat = new THREE.LineBasicMaterial({ color: 0x4ecdc4, transparent: true, opacity: 0.5 });
+  const border = new THREE.LineSegments(borderGeo, borderMat);
+  scene.add(border); objects.push(border);
+
+  // Grid
+  const gridSize = 10;
+  const gridPts = [];
+  for (let x = 0; x <= L; x += gridSize) {
+    gridPts.push(x, 0.02, 0, x, 0.02, WD);
+  }
+  for (let z = 0; z <= WD; z += gridSize) {
+    gridPts.push(0, 0.02, z, L, 0.02, z);
+  }
+  const gridGeo = new THREE.BufferGeometry();
+  gridGeo.setAttribute('position', new THREE.Float32BufferAttribute(gridPts, 3));
+  const gridMat = new THREE.LineBasicMaterial({ color: 0x78b4c8, transparent: true, opacity: 0.06 });
+  const grid = new THREE.LineSegments(gridGeo, gridMat);
+  scene.add(grid); objects.push(grid);
+
+  // Trees
+  const trees = getTrees();
+  const canopyR = state.tree.canopy / 2;
+  const treeH = state.tree.height;
+  const trunkH = treeH * 0.55;
+  const canopyH = treeH * 0.45;
+
+  const trunkGeo = new THREE.CylinderGeometry(0.15, 0.2, trunkH, 6);
+  const trunkMat = new THREE.MeshLambertMaterial({ color: 0x5d4037 });
+  const canopyGeo = new THREE.SphereGeometry(canopyR, 10, 8);
+  const canopyMat = new THREE.MeshLambertMaterial({ color: 0x5a8a3a, transparent: true, opacity: 0.8 });
+
+  // Batch trees using InstancedMesh
+  const nt = trees.length;
+  const trunkInst = new THREE.InstancedMesh(trunkGeo, trunkMat, nt);
+  const canopyInst = new THREE.InstancedMesh(canopyGeo, canopyMat, nt);
+
+  const m = new THREE.Matrix4();
+  trees.forEach((t, i) => {
+    m.makeTranslation(t.x, trunkH / 2, t.y);
+    trunkInst.setMatrixAt(i, m);
+    const m2 = new THREE.Matrix4();
+    m2.makeScale(1, canopyH / (canopyR * 2), 1);
+    m2.setPosition(t.x, trunkH + canopyH / 2, t.y);
+    canopyInst.setMatrixAt(i, m2);
+  });
+  scene.add(trunkInst); scene.add(canopyInst);
+  objects.push(trunkInst, canopyInst);
+
+  // Camera poles and cones
+  state.cameras.forEach(cam => {
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.1, 0.1, state.pole.height, 6),
+      new THREE.MeshLambertMaterial({ color: 0x90a4ae })
+    );
+    pole.position.set(cam.x, state.pole.height / 2, cam.y);
+    scene.add(pole); objects.push(pole);
+
+    // Camera head
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, 0.5, 0.8),
+      new THREE.MeshLambertMaterial({ color: 0xf5a623, emissive: 0xf5a623, emissiveIntensity: 0.5 })
+    );
+    head.position.set(cam.x, state.pole.height + 0.25, cam.y);
+    scene.add(head); objects.push(head);
+
+    // Coverage cone (using a disc on the ground at tree-top height)
+    const coneGeo = new THREE.RingGeometry(0, state.rDetail, 48);
+    const coneMat = new THREE.MeshBasicMaterial({
+      color: 0x4ecdc4,
+      transparent: true,
+      opacity: 0.08,
+      side: THREE.DoubleSide
+    });
+    const cone = new THREE.Mesh(coneGeo, coneMat);
+    cone.rotation.x = -Math.PI / 2;
+    cone.position.set(cam.x, state.tree.height, cam.y);
+    scene.add(cone); objects.push(cone);
+
+    // Ring outline
+    const ringGeo = new THREE.RingGeometry(state.rDetail - 0.2, state.rDetail, 48);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x4ecdc4, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(cam.x, state.tree.height + 0.05, cam.y);
+    scene.add(ring); objects.push(ring);
+
+    // Cone visualization (actual 3D cone from camera downward)
+    const coneBottomR = state.rDetail;
+    const coneHeight = state.pole.height - state.tree.height + 1;
+    if (coneHeight > 0.5) {
+      const coneVGeo = new THREE.ConeGeometry(coneBottomR, coneHeight, 32, 1, true);
+      const coneVMat = new THREE.MeshBasicMaterial({
+        color: 0xf5a623, transparent: true, opacity: 0.05,
+        side: THREE.DoubleSide, depthWrite: false
+      });
+      const coneV = new THREE.Mesh(coneVGeo, coneVMat);
+      coneV.position.set(cam.x, state.pole.height - coneHeight/2, cam.y);
+      coneV.rotation.x = Math.PI;
+      scene.add(coneV); objects.push(coneV);
+    }
+  });
+}
+
+// ============================================================
+// EVENTS
+// ============================================================
+
+function attachEvents() {
+  // All inputs trigger update
+  const inputs = ['fieldLength','fieldWidth','rowSpacing','colSpacing',
+                  'treeHeight','canopyDiameter','poleHeight','numCams',
+                  'sensorW','sensorH','fovWide','fovTele','zoomLevel',
+                  'targetSize','minPixels'];
+  inputs.forEach(id => {
+    const el = $(id);
+    el.addEventListener('input', () => {
+      // Update sliders label
+      if (id === 'poleHeight') $('poleHeightVal').textContent = el.value;
+      if (id === 'numCams') $('numCamsVal').textContent = el.value;
+      if (id === 'zoomLevel') $('zoomVal').textContent = el.value;
+
+      // Re-place cameras if numCams or field size changed
+      if (['numCams', 'fieldLength', 'fieldWidth'].includes(id)) {
+        state.cameras = autoPlaceCameras(+$('numCams').value, +$('fieldLength').value, +$('fieldWidth').value);
+      }
+      renderAll();
+    });
+  });
+
+  // Preset buttons for camera
+  $('cameraPreset').addEventListener('change', e => {
+    const p = PRESETS[e.target.value];
+    if (p) {
+      $('sensorW').value = p.sensorW;
+      $('sensorH').value = p.sensorH;
+      $('fovWide').value = p.fovWide;
+      $('fovTele').value = p.fovTele;
+      renderAll();
+    }
+  });
+
+  // Zoom presets
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      $('zoomLevel').value = btn.dataset.zoom;
+      $('zoomVal').textContent = btn.dataset.zoom;
+      renderAll();
+    });
+  });
+
+  // Auto-place
+  $('btnAutoPlace').addEventListener('click', () => {
+    state.cameras = autoPlaceCameras(state.numCams, state.field.length, state.field.width);
+    renderAll();
+  });
+
+  // Export JSON
+  $('btnExportJSON').addEventListener('click', () => {
+    const data = {
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      field: state.field,
+      spacing: state.spacing,
+      tree: state.tree,
+      pole: state.pole,
+      camera: state.cam,
+      target: state.target,
+      cameras: state.cameras,
+      calculated: {
+        fovAtZoom: state.currentFov,
+        gsdMax: state.gsdMax,
+        rDetail: state.rDetail,
+        coverage: state._coverage ? { detailPct: state._coverage.detailPct, blindPct: state._coverage.blindPct } : null
+      }
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `cashew-camera-plan-${Date.now()}.json`;
+    a.click();
+  });
+
+  // Export PNG of top-down
+  $('btnExportPNG').addEventListener('click', () => {
+    const canvas = $('topCanvas');
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cashew-camera-topdown-${Date.now()}.png`;
+    a.click();
+  });
+
+  // Print
+  $('btnPrintReport').addEventListener('click', () => window.print());
+
+  // Click on top canvas to add camera
+  $('topCanvas').addEventListener('click', e => {
+    if (!state._topProj) return;
+    const rect = e.target.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    const { ox, oy, scale } = state._topProj;
+    const worldX = (cx - ox) / scale;
+    const worldY = (cy - oy) / scale;
+    if (worldX >= 0 && worldX <= state.field.length && worldY >= 0 && worldY <= state.field.width) {
+      state.cameras.push({ x: worldX, y: worldY, id: state.cameras.length + 1 });
+      $('numCams').value = state.cameras.length;
+      $('numCamsVal').textContent = state.cameras.length;
+      state.numCams = state.cameras.length;
+      renderAll();
+    }
+  });
+}
+
+// ============================================================
+// RENDER ALL
+// ============================================================
+function renderAll() {
+  readInputs();
+  if (state.cameras.length === 0) {
+    state.cameras = autoPlaceCameras(state.numCams, state.field.length, state.field.width);
+  }
+  updateKPIs();
+  updateRecommendation();
+  updateGsdTable();
+  updateCameraList();
+  drawTopDown();
+  drawSideView();
+  drawHeatmap();
+  rebuild3D();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('load', () => {
+  attachEvents();
+  init3D();
+  renderAll();
+});
+
+window.addEventListener('resize', () => {
+  drawTopDown();
+  drawSideView();
+  drawHeatmap();
+});
+</script>
+
+</body>
+</html>
